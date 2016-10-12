@@ -6,7 +6,10 @@
             [untangled.datomic.impl.util :as util]
             [taoensso.timbre :as timbre]
             [untangled.datomic.schema :as schema]
-            [untangled.datomic.protocols :as p]))
+            [untangled.datomic.protocols :as p])
+  (:import (datomic Connection)
+           (datomic.db Db)
+           (untangled.datomic.impl.components DatabaseComponent)))
 
 (defn retract-datomic-entity [connection entity-id] @(d/transact connection [[:db.fn/retractEntity entity-id]]))
 
@@ -17,21 +20,36 @@
     client-tempids->server-tempids))
 
 (defn query
-  "Runs a datomic query against the database component. Same basic structure as datomic.api/q, AND
-  you may use the `datomic.id` namespaced keywords used to seed the component as the values of bound variables
-  within `in` clauses. Only supports one bound database value for `in` clauses.
+  " Has the same function signature as datomic.api/q, except that it accepts any of the following as data sources:
+
+  - A Datomic connection
+  - A Datomic database instance
+  - An Untangled DatabaseComponent
+
+  You may use the `datomic.id` namespaced keywords used to seed a DatabaseComponent as query parameters, which will be
+  resolved to their real datomic ids.
 
   e.g. (query
           '[:find ?a :in $ ?id :where [?e :author/address ?a]
                                       [?e :author/name ?id]]
           database-component
-          :datomic.id/author-name)"
-  [query database-comp & bound-variables]
-  (let [db (d/db (p/get-connection database-comp))
-        seeded-id-map (:seed-result (p/get-info database-comp))
-        real-ids (map #(get seeded-id-map % %) bound-variables)]
+          :datomic.id/author-name)
 
-    (apply d/q query db real-ids)))
+  NOTE: If using multiple DatabaseComponents as sources, DO NOT use the same `datomic.id` namespaced keywords for seeding.
+  If the same `datomic.id` namespaced keyword is used in multiple DatabaseComponent sources in the same query, then the
+  resolved datomic id will always be from the first DatabaseComponent source in which that keyword was used for seeding."
+  [query & query-parameters]
+  (let [dbs (atom [])]
+    (letfn [(parse-parameter [parameter]
+              (let [param-type (type parameter)]
+                (cond
+                  (= Db param-type) parameter
+                  (contains? (supers param-type) Connection) (d/db parameter)
+                  (= DatabaseComponent param-type) (do
+                                                     (swap! dbs conj parameter)
+                                                     @parameter)
+                  :else (or (some #(get (:seed-result %) parameter) @dbs) parameter))))]
+      (apply d/q query (map parse-parameter query-parameters)))))
 
 (defn replace-ref-types
   "@dbc   the database to query

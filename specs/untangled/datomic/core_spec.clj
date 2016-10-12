@@ -12,8 +12,8 @@
 
 (t/use-fixtures
   :once #(timbre/with-merged-config
-           {:ns-blacklist ["untangled.datomic.core"]}
-           (%)))
+          {:ns-blacklist ["untangled.datomic.core"]}
+          (%)))
 
 (specification "The query function"
   (test/with-db-fixture fixture
@@ -27,14 +27,23 @@
                                 [?e :user/address ?a]
                                 [?e :user/status ?status]]
                     fixture
-                    :user.status/pending)]
+                    :user.status/pending)
+          zipcode-conn (core/query '[:find ?zip . :in $ ?status :where
+                                     [?a :address/zipcode ?zip]
+                                     [?e :user/address ?a]
+                                     [?e :user/status ?status]]
+                         (ud/get-connection fixture)
+                         :user.status/pending)]
 
       (assertions
-        "If bound variable is a seeded-id, resolves it to a real datomic id."
-        username => "untangled"
+        "Runs query when a datomic peer connection is passed as a query source"
+        zipcode-conn => 97702
 
-        "If bound variable is not a seeded-id, leaves as is."
-        zipcode => 97702))
+        "If bound variable is not a seeded-id in a DatabaseComponent, leaves as is."
+        zipcode => 97702
+
+        "If bound variable is a seeded-id in a DatabaseComponent, resolves it to a real datomic id."
+        username => "untangled"))
 
     :migrations "sample-migrations.migrations.test"
     :seed-fn (fn [conn] (test/link-and-load-seed-data
