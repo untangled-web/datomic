@@ -4,7 +4,7 @@
             [datomic.api :as datomic]
             [taoensso.timbre :refer [info fatal]]
             [untangled.datomic.schema :as schema]
-            [untangled.datomic.protocols :refer [Database]]))
+            [untangled.datomic.protocols :as udp :refer [Database]]))
 
 (defn- run-migrations [migration-ns kw conn]
   (info "Applying migrations " migration-ns "to" kw "database.")
@@ -34,8 +34,10 @@
     2 (f c (dissoc db-cfg :seed-function))))
 
 (defrecord DatabaseComponent [db-name connection seed-result config]
+  clojure.lang.IDeref
+  (deref [this] (datomic/db (udp/get-connection this)))
   Database
-  (get-connection [this] (:connection this))
+  (get-connection [this] connection)
   (get-db-config [this]
     (let [config (-> this :config :value :datomic)
           db-config (-> config :dbs db-name)]
@@ -77,3 +79,7 @@
         (info "Deleting database" db-name url)
         (datomic/delete-database url)))
     (assoc this :connection nil)))
+
+(prefer-method io.aviso.exception/exception-dispatch clojure.lang.IPersistentMap clojure.lang.IDeref)
+(prefer-method print-method clojure.lang.IRecord clojure.lang.IDeref)
+(prefer-method clojure.pprint/simple-dispatch clojure.lang.IPersistentMap clojure.lang.IDeref)

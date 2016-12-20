@@ -16,7 +16,7 @@
            (%)))
 
 (def default-db-name :db1)
-(def default-db-url "db1-url")
+(def default-db-url "datomic:mem://db1-url")
 (def default-schema "schema.default")
 (defn make-config [m]
   {:datomic {:dbs {default-db-name (merge {:url    default-db-url
@@ -53,6 +53,10 @@
   (behavior "implements Database"
     (assertions
       (satisfies? untangled.datomic.protocols/Database (build-database "a-db-name")) => true))
+
+  (behavior "is deref-able"
+    (assertions
+      (type @(:db (start-system))) => datomic.db.Db))
 
   (behavior "implements component/Lifecycle"
     (assertions
@@ -112,7 +116,7 @@
                                 (fn [c db-cfg]
                                   (assertions
                                     c => :fake/conn
-                                    db-cfg => {:url "db1-url",
+                                    db-cfg => {:url default-db-url
                                                :migration-ns "schema.default",
                                                :migrate-on-start false})
                                   :ok)})]
